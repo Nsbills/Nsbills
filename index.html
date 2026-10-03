@@ -116,17 +116,26 @@ function vForm(){
 let h5=null;
 async function scan(){
   const ov=document.createElement('div');ov.className='ov';ov.id='sc';
-  ov.innerHTML='<div class="box"><div id="qr" style="width:100%;min-height:160px"></div><div id="hq" style="display:none"></div><div id="sm" class="mu" style="margin:8px 0">Point the camera at the barcode on the bill</div><button class="s w" onclick="stopScan()">Close</button></div>';
+  ov.innerHTML='<div class="box"><div id="qr" style="width:100%;min-height:160px"></div><div id="hq" style="display:none"></div><div id="sm" class="mu" style="margin:8px 0">Hold the phone 15-20 cm from the barcode, keep it flat and in good light. It scans automatically, or tap Capture.</div><button class="w" onclick="snap()">Capture now</button><button class="s w" onclick="stopScan()">Close (type manually)</button></div>';
   document.body.appendChild(ov);
   try{
     if(!window.Html5Qrcode)throw 'NoLib';
-    h5=new Html5Qrcode('qr',{verbose:false,experimentalFeatures:{useBarCodeDetectorIfSupported:true}});
-    await h5.start({facingMode:'environment'},{fps:10,qrbox:{width:300,height:110}},txt=>{if(!h5)return;stopScan();applyScan(txt)},()=>{});
+    const F=Html5QrcodeSupportedFormats;h5=new Html5Qrcode('qr',{verbose:false,formatsToSupport:[F.CODE_128,F.CODE_39,F.ITF,F.EAN_13,F.QR_CODE],experimentalFeatures:{useBarCodeDetectorIfSupported:true}});
+    await h5.start({facingMode:'environment',width:{ideal:1920},height:{ideal:1080}},{fps:15,qrbox:(w,h)=>({width:Math.floor(w*.95),height:Math.floor(Math.min(h*.6,w*.5))})},txt=>{if(!h5)return;stopScan();applyScan(txt)},()=>{});
   }catch(e){
     const m=String(e&&e.name||e);const h=h5;h5=null;if(h){try{h.clear()}catch(x){}}
     const why=m.includes('NotAllowed')?'Camera permission is blocked here. Allow camera for this site in Chrome settings, or open the page directly in Chrome.':'Live camera could not start.';
     $('sm').innerHTML=why+'<label style="display:block;margin-top:8px;padding:12px;border-radius:8px;background:var(--pr);color:#fff;text-align:center;font-weight:600">Take photo instead<input type="file" accept="image/*" capture="environment" hidden onchange="photo(this)"></label>';
   }
+}
+async function snap(){
+  const v=document.querySelector('#qr video');if(!v||!v.videoWidth)return;
+  $('sm').textContent='Reading...';
+  const c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);
+  let val=null;
+  try{if('BarcodeDetector' in window){const r=await new BarcodeDetector().detect(c);if(r.length)val=r[0].rawValue}}catch(e){}
+  try{if(!val){const b=await new Promise(r=>c.toBlob(r,'image/png'));val=(await new Html5Qrcode('hq').scanFile(new File([b],'f.png',{type:'image/png'}),false)).decodedText}}catch(e){}
+  if(val){stopScan();applyScan(val)}else $('sm').textContent='Not readable. Move a little closer or farther, keep the barcode flat in good light, then tap Capture again.';
 }
 async function photo(inp){
   const f=inp.files[0];if(!f)return;
